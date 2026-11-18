@@ -2,6 +2,7 @@
 
 namespace App\Services\PixelForge;
 
+use App\Events\GenerationUpdated;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
 use App\Services\GenerationPricing;
@@ -131,6 +132,11 @@ final class WebhookEventProcessor
         }
 
         $generation->save();
+
+        // Only a real change is news: duplicates and late events change nothing.
+        if ($generation->wasChanged('status')) {
+            GenerationUpdated::dispatch($generation->id, $generation->user_id, $generation->status);
+        }
     }
 
     /**

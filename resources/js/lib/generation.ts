@@ -1,7 +1,5 @@
 import type { GenerationRow, GenerationStatus } from "@/types";
 
-export const POLL_INTERVAL_MS = 4000;
-
 export const isPending = (status: GenerationStatus): boolean =>
     status === "queued" || status === "processing";
 

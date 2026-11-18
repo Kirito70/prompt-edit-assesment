@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, usePoll } from "@inertiajs/vue3";
-import { computed, watch } from "vue";
+import { Head, Link } from "@inertiajs/vue3";
 import Heading from "@/components/Heading.vue";
 import GenerationStatusBadge from "@/components/prompt-edit/GenerationStatusBadge.vue";
 import { EyeIcon } from "@lucide/vue";
@@ -14,17 +13,11 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { history } from "@/routes";
-import {
-    formatCost,
-    formatDate,
-    isImageExpired,
-    isPending,
-    POLL_INTERVAL_MS,
-} from "@/lib/generation";
+import { formatCost, formatDate, isImageExpired } from "@/lib/generation";
 import type { GenerationRow, Paginated } from "@/types";
 import { show } from "@/routes/history";
 
-const props = defineProps<{
+defineProps<{
     generations: Paginated<GenerationRow>;
 }>();
 
@@ -34,20 +27,8 @@ defineOptions({
     },
 });
 
-const hasPending = computed(() =>
-    props.generations.data.some((row) => isPending(row.status)),
-);
-
-// Live status: poll only the generations prop, and only while a row is in flight.
-const { start, stop } = usePoll(
-    POLL_INTERVAL_MS,
-    { only: ["generations"] },
-    { autoStart: false },
-);
-
-watch(hasPending, (pending) => (pending ? start() : stop()), {
-    immediate: true,
-});
+// Live: the server pushes a refresh over WebSockets whenever one of these
+// generations changes (see GenerationController::index), so there is no polling.
 
 const paginationLabel = (label: string): string =>
     label.replace("&laquo; ", "").replace(" &raquo;", "");

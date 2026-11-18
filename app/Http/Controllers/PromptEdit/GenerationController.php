@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\PromptEdit;
 
 use App\Actions\Generations\CreateGeneration;
+use App\Events\GenerationUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PromptEdit\StoreGenerationRequest;
 use App\Models\Generation;
 use App\Services\PixelForge\Exceptions\PixelForgeException;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -64,11 +66,18 @@ class GenerationController extends Controller
      */
     public function index(Request $request): Response
     {
-        $generations = $request->user()
-            ->generations()
-            ->latest()
-            ->paginate(self::PER_PAGE)
-            ->through(fn (Generation $generation): array => $this->toRow($generation));
+        $user = $request->user();
+
+        // Live: refreshed whenever one of this user's generations changes.
+        $generations = Inertia::live(
+            fn () => $user
+                ->generations()
+                ->latest()
+                ->paginate(self::PER_PAGE)
+                ->through(fn (Generation $generation): array => $this->toRow($generation)),
+            on: GenerationUpdated::class,
+            channel: new PrivateChannel("users.{$user->id}.generations"),
+        );
 
         return Inertia::render('prompt-edit/generations/history', [
             'generations' => $generations,
@@ -86,8 +95,13 @@ class GenerationController extends Controller
             ->generations()
             ->findOrFail($generation);
 
+        // Live: refreshed whenever this generation changes.
         return Inertia::render('prompt-edit/generations/show', [
-            'generation' => $this->toDetail($generation),
+            'generation' => Inertia::live(
+                fn () => $this->toDetail($generation->refresh()),
+                on: GenerationUpdated::class,
+                channel: new PrivateChannel("generations.{$generation->id}"),
+            ),
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\GenerationUpdated;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
 use App\Services\PixelForge\Exceptions\PixelForgeOutcomeUnknown;
@@ -128,6 +129,8 @@ class SubmitGenerationToPixelForge implements ShouldQueue
                 'error_message' => $message,
                 'settled_at' => now(),
             ]);
+
+            GenerationUpdated::dispatch($locked->id, $locked->user_id, $locked->status);
         });
     }
 

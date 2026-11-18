@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, usePoll } from "@inertiajs/vue3";
+import { Head, Link } from "@inertiajs/vue3";
 import { ArrowLeft, ExternalLink, ImageOff } from "@lucide/vue";
-import { computed, watch } from "vue";
+import { computed } from "vue";
 import Heading from "@/components/Heading.vue";
 import GenerationStatusBadge from "@/components/prompt-edit/GenerationStatusBadge.vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,7 +12,6 @@ import {
     formatDate,
     isImageExpired,
     isPending,
-    POLL_INTERVAL_MS,
 } from "@/lib/generation";
 import { history } from "@/routes";
 import type { Generation } from "@/types";
@@ -39,14 +38,8 @@ const hasImage = computed(
 );
 const referenceImages = computed(() => props.generation.reference_images ?? []);
 
-// Live status: refresh only this generation while it is in flight.
-const { start, stop } = usePoll(
-    POLL_INTERVAL_MS,
-    { only: ["generation"] },
-    { autoStart: false },
-);
-
-watch(pending, (value) => (value ? start() : stop()), { immediate: true });
+// Live: the server pushes a refresh over WebSockets whenever this generation
+// changes (see GenerationController::show), so there is no polling.
 </script>
 
 <template>

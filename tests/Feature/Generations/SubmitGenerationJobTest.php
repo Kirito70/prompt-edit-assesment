@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\GenerationUpdated;
 use App\Jobs\SubmitGenerationToPixelForge;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
@@ -7,6 +8,7 @@ use App\Services\PixelForge\WebhookEventProcessor;
 use App\Services\PixelForgeService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
 const JOB_GEN_URL = 'https://pixelforge.test/v1/generations';
@@ -230,4 +232,29 @@ test('can be pushed onto the real database queue', function () {
     SubmitGenerationToPixelForge::dispatch($generation->id);
 
     expect(DB::table('jobs')->count())->toBe(1);
+});
+
+test('a rejection is announced so the page updates', function () {
+    Event::fake([GenerationUpdated::class]);
+    fakePixelForge([JOB_GEN_URL => Http::response(
+        ['error' => ['type' => 'invalid_request_error', 'code' => 'content_policy_violation', 'message' => 'no']],
+        400,
+    )]);
+    $generation = pendingGeneration();
+
+    runSubmitJob($generation);
+
+    Event::assertDispatchedTimes(GenerationUpdated::class, 1);
+    Event::assertDispatched(GenerationUpdated::class, fn (GenerationUpdated $e) => $e->generationId === $generation->id
+        && $e->userId === $generation->user_id
+        && $e->status === 'failed');
+});
+
+test('being accepted is not announced, because nothing visible changed', function () {
+    Event::fake([GenerationUpdated::class]);
+    fakePixelForge([JOB_GEN_URL => Http::response(acceptedBody(), 202)]);
+
+    runSubmitJob(pendingGeneration());
+
+    Event::assertNotDispatched(GenerationUpdated::class);
 });

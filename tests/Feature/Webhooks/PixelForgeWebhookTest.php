@@ -1,7 +1,9 @@
 <?php
 
+use App\Events\GenerationUpdated;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 
 const WH_URL = '/api/webhooks/pixelforge';
@@ -323,5 +325,62 @@ describe('pixelforge:process-webhooks', function () {
 
         expect($generation->fresh()->status)->toBe('succeeded')
             ->and(WebhookEvent::whereNull('processed_at')->count())->toBe(0);
+    });
+});
+
+describe('live updates', function () {
+    beforeEach(function () {
+        Event::fake([GenerationUpdated::class]);
+    });
+
+    test('settling a generation announces it to its owner', function () {
+        $generation = whGen(['status' => 'processing']);
+
+        whPost(whEvent('generation.succeeded', whSucceeded()))->assertOk();
+
+        Event::assertDispatchedTimes(GenerationUpdated::class, 1);
+        Event::assertDispatched(GenerationUpdated::class, fn (GenerationUpdated $event) => $event->generationId === $generation->id
+            && $event->userId === $generation->user_id
+            && $event->status === 'succeeded');
+    });
+
+    test('a failure and a move to processing are announced too', function () {
+        whGen(['status' => 'queued']);
+
+        whPost(whEvent('generation.processing', whGeneration('processing'), 'evt_1'))->assertOk();
+        whPost(whEvent('generation.failed', whFailed(), 'evt_2'))->assertOk();
+
+        Event::assertDispatchedTimes(GenerationUpdated::class, 2);
+        Event::assertDispatched(GenerationUpdated::class, fn (GenerationUpdated $e) => $e->status === 'processing');
+        Event::assertDispatched(GenerationUpdated::class, fn (GenerationUpdated $e) => $e->status === 'failed');
+    });
+
+    test('a duplicate delivery does not announce again', function () {
+        whGen();
+        $payload = whEvent('generation.succeeded', whSucceeded());
+
+        whPost($payload)->assertOk();
+        whPost($payload)->assertOk();
+
+        Event::assertDispatchedTimes(GenerationUpdated::class, 1);
+    });
+
+    test('events that change nothing are not announced', function () {
+        whGen();
+
+        whPost(whEvent('generation.succeeded', whSucceeded(), 'evt_1'))->assertOk();
+        whPost(whEvent('generation.failed', whFailed(), 'evt_2'))->assertOk();
+        whPost(whEvent('generation.processing', whGeneration('processing'), 'evt_3'))->assertOk();
+
+        Event::assertDispatchedTimes(GenerationUpdated::class, 1);
+    });
+
+    test('nothing is announced when the generation is unknown or the event cannot be applied', function () {
+        whPost(whEvent('generation.succeeded', whSucceeded(), 'evt_unknown'))->assertAccepted();
+
+        whGen();
+        whPost(whEvent('generation.succeeded', whGeneration('succeeded'), 'evt_bad'))->assertStatus(500);
+
+        Event::assertNotDispatched(GenerationUpdated::class);
     });
 });
