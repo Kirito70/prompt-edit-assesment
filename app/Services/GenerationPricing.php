@@ -100,12 +100,33 @@ final class GenerationPricing
         // Estimate with the midpoint, rounded down if fractional.
         $reasoningTokens = $minimum + intdiv($maximum - $minimum, 2);
 
-        return $this->calculate([
-            'input_text_tokens' => $textTokens,
+        $rates = $pricing['rates'] ?? [];
+        $fixed = [
             'input_image_tokens' => count($referenceImages) * $perImage,
             'output_tokens' => $output,
+        ];
+
+        $estimate = $this->calculate([
+            'input_text_tokens' => $textTokens,
             'reasoning_tokens' => $reasoningTokens,
-        ], $pricing['rates'] ?? []);
+        ] + $fixed, $rates);
+
+        // Text tokens are only known within ±variance after the generation
+        // finishes, and reasoning tokens fall anywhere in the quality's range.
+        $percent = $this->variancePercent($config['text_token_variance'] ?? 0);
+
+        $estimate['range'] = [
+            'low' => $this->calculate([
+                'input_text_tokens' => intdiv($textTokens * (100 - $percent), 100),
+                'reasoning_tokens' => $minimum,
+            ] + $fixed, $rates)['customer_charge'],
+            'high' => $this->calculate([
+                'input_text_tokens' => intdiv($textTokens * (100 + $percent) + 99, 100),
+                'reasoning_tokens' => $maximum,
+            ] + $fixed, $rates)['customer_charge'],
+        ];
+
+        return $estimate;
     }
 
     /**
@@ -233,6 +254,19 @@ final class GenerationPricing
         }
 
         return $value;
+    }
+
+    /**
+     * The variance as a whole percentage (0.15 becomes 15). It only widens a
+     * token count, so it never touches money directly.
+     */
+    private function variancePercent(mixed $variance): int
+    {
+        if (! is_int($variance) && ! is_float($variance)) {
+            return 0;
+        }
+
+        return max(0, min(99, (int) round($variance * 100)));
     }
 
     private function count(mixed $value, string $field): int

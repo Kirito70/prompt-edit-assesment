@@ -20,10 +20,10 @@ use Illuminate\Support\Carbon;
  * @property string $prompt
  * @property string $size
  * @property string $quality
- * @property array<int, string> $reference_images
+ * @property list<string> $reference_images
  * @property string $status queued|processing|succeeded|failed
  * @property string $submission_status pending|accepted|rejected|unknown
- * @property string $estimated_customer_charge
+ * @property string|null $estimated_customer_charge
  * @property string|null $provider_cost
  * @property string|null $customer_charge
  * @property array<string, mixed>|null $rates
@@ -39,6 +39,14 @@ class Generation extends Model
 {
     /** @use HasFactory<GenerationFactory> */
     use HasFactory, HasUuids;
+
+    public const SIZES = ['1024x1024', '1536x1024', '1024x1536'];
+
+    public const QUALITIES = ['low', 'medium', 'high'];
+
+    public const MAX_PROMPT_LENGTH = 4000;
+
+    public const MAX_REFERENCE_IMAGES = 4;
 
     protected $guarded = [];
 

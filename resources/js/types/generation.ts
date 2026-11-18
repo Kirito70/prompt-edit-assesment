@@ -6,7 +6,8 @@ export type GenerationRow = {
     size: string;
     quality: string;
     status: GenerationStatus;
-    estimated_cost: string;
+    /** Null when the user generated without a price being shown. */
+    estimated_cost: string | null;
     actual_cost: string | null;
     image_url: string | null;
     image_url_expires_at: string | null;
@@ -38,4 +39,27 @@ export type Paginated<T> = {
     current_page: number;
     last_page: number;
     total: number;
+};
+
+export type EstimateInput = {
+    prompt: string;
+    size: string;
+    quality: string;
+    reference_images: string[];
+};
+
+export type EstimateResponse = {
+    customer_charge: string;
+    range: { low: string; high: string };
+    tokens: {
+        input_text_tokens: number;
+        input_image_tokens: number;
+        output_tokens: number;
+        reasoning_tokens: number;
+    };
+};
+
+export type GenerationLimits = {
+    prompt: number;
+    reference_images: number;
 };

@@ -114,6 +114,41 @@ describe('estimate', function () {
     })->throws(InvalidArgumentException::class);
 });
 
+describe('estimate range', function () {
+    test('brackets the estimate with ±15% text tokens and the min and max reasoning tokens', function () {
+        // low:  21 text, 200 reasoning  -> (0.000105 + 0.044 + 0.0025)   × 1.25 = 0.05825625
+        // high: 29 text, 2000 reasoning -> (0.000145 + 0.044 + 0.025)    × 1.25 = 0.08643125
+        $result = estimate(str_repeat('a', 100));
+
+        expect($result['range'])->toBe([
+            'low' => '0.058256250000',
+            'high' => '0.086431250000',
+        ])->and($result['customer_charge'])->toBe('0.072343750000');
+    });
+
+    test('the estimate always sits between low and high', function (string $quality, string $size, int $characters) {
+        $result = estimate(str_repeat('a', $characters), $size, $quality, ['https://a.test/i.png']);
+
+        expect(bccomp($result['range']['low'], $result['customer_charge'], 12))->toBeLessThanOrEqual(0)
+            ->and(bccomp($result['range']['high'], $result['customer_charge'], 12))->toBeGreaterThanOrEqual(0);
+    })->with([
+        ['low', '1024x1024', 1],
+        ['medium', '1536x1024', 400],
+        ['high', '1024x1536', 4000],
+    ]);
+
+    test('has no spread when the variance is zero and reasoning is fixed', function () {
+        $config = pricingConfig();
+        $config['tokens']['text_token_variance'] = 0;
+        $config['tokens']['reasoning']['medium'] = ['min' => 500, 'max' => 500];
+
+        $result = (new GenerationPricing)->estimate(str_repeat('a', 100), '1024x1024', 'medium', [], $config);
+
+        expect($result['range']['low'])->toBe($result['customer_charge'])
+            ->and($result['range']['high'])->toBe($result['customer_charge']);
+    });
+});
+
 describe('actual', function () {
     test('prices a succeeded generation from usage and the rates stored on it', function () {
         // 0.000135 + 0.00765 + 0.044 + 0.01875 = 0.070535, × 1.25 = 0.08816875
