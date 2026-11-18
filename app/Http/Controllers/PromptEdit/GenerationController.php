@@ -39,4 +39,18 @@ class GenerationController extends Controller
             'generations' => $generations,
         ]);
     }
+
+    public function show(Request $request, $generation): Response
+    {
+        $generation = $request->user()
+            ->generations()
+            ->with([
+                'user',
+            ])
+            ->findOrFail($generation);
+
+        return Inertia::render('prompt-edit/generations/show', [
+            'generation' => $generation,
+        ]);
+    }
 }

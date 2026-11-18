@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head, Link, router } from "@inertiajs/vue3";
-import { computed, onBeforeUnmount, watch } from "vue";
+import { Head, Link, usePoll } from "@inertiajs/vue3";
+import { computed, watch } from "vue";
 import Heading from "@/components/Heading.vue";
 import { Badge } from "@/components/ui/badge";
+import { EyeIcon } from "@lucide/vue";
 import {
     Table,
     TableBody,
@@ -13,7 +14,13 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { history } from "@/routes";
-import type { GenerationRow, GenerationStatus, Paginated } from "@/types";
+import type {
+    Generation,
+    GenerationRow,
+    GenerationStatus,
+    Paginated,
+} from "@/types";
+import { show } from "@/routes/history";
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -43,34 +50,16 @@ const hasPending = computed(() =>
     ),
 );
 
-// Live status: refresh only the generations prop while something is in flight.
-let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-const stopPolling = (): void => {
-    if (pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-};
-
-watch(
-    hasPending,
-    (pending) => {
-        if (!pending) {
-            stopPolling();
-
-            return;
-        }
-
-        pollTimer ??= setInterval(
-            () => router.reload({ only: ["generations"] }),
-            POLL_INTERVAL_MS,
-        );
-    },
-    { immediate: true },
+// Live status: poll only the generations prop, and only while a row is in flight.
+const { start, stop } = usePoll(
+    POLL_INTERVAL_MS,
+    { only: ["generations"] },
+    { autoStart: false },
 );
 
-onBeforeUnmount(stopPolling);
+watch(hasPending, (pending) => (pending ? start() : stop()), {
+    immediate: true,
+});
 
 const paginationLabel = (label: string): string =>
     label.replace("&laquo; ", "").replace(" &raquo;", "");
@@ -80,10 +69,14 @@ const isImageExpired = (row: GenerationRow): boolean =>
     new Date(row.image_url_expires_at).getTime() <= Date.now();
 
 const formatCost = (value: string | null): string =>
-    value === null ? "—" : `$${Number(value).toFixed(4)}`;
+    value === null ? "-" : `$${Number(value).toFixed(4)}`;
 
 const formatDate = (value: string | null): string =>
     value === null ? "" : new Date(value).toLocaleString();
+
+const viewGenerationDetail = (generation: Generation) => {
+    console.log(generation);
+};
 </script>
 
 <template>
@@ -107,6 +100,7 @@ const formatDate = (value: string | null): string =>
                         <TableHead class="text-right">Estimated</TableHead>
                         <TableHead class="text-right">Actual</TableHead>
                         <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -116,7 +110,10 @@ const formatDate = (value: string | null): string =>
                     >
                         No generations yet.
                     </TableEmpty>
-                    <TableRow v-for="row in generations.data" :key="row.id">
+                    <TableRow
+                        v-for="row in generations.data"
+                        :key="row.id"
+                    >
                         <TableCell class="w-24">
                             <img
                                 v-if="row.image_url && !isImageExpired(row)"
@@ -161,6 +158,12 @@ const formatDate = (value: string | null): string =>
                             class="whitespace-nowrap text-muted-foreground"
                         >
                             {{ formatDate(row.created_at) }}
+                        </TableCell>
+
+                        <TableCell class="">
+                            <Link :href="show({ generation: row.id })">
+                                <component :is="EyeIcon" />
+                            </Link>
                         </TableCell>
                     </TableRow>
                 </TableBody>
