@@ -2,7 +2,7 @@
 import { Head, Link, usePoll } from "@inertiajs/vue3";
 import { computed, watch } from "vue";
 import Heading from "@/components/Heading.vue";
-import { Badge } from "@/components/ui/badge";
+import GenerationStatusBadge from "@/components/prompt-edit/GenerationStatusBadge.vue";
 import { EyeIcon } from "@lucide/vue";
 import {
     Table,
@@ -14,15 +14,15 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { history } from "@/routes";
-import type {
-    Generation,
-    GenerationRow,
-    GenerationStatus,
-    Paginated,
-} from "@/types";
+import {
+    formatCost,
+    formatDate,
+    isImageExpired,
+    isPending,
+    POLL_INTERVAL_MS,
+} from "@/lib/generation";
+import type { GenerationRow, Paginated } from "@/types";
 import { show } from "@/routes/history";
-
-const POLL_INTERVAL_MS = 4000;
 
 const props = defineProps<{
     generations: Paginated<GenerationRow>;
@@ -34,20 +34,8 @@ defineOptions({
     },
 });
 
-const statusVariant: Record<
-    GenerationStatus,
-    "default" | "secondary" | "destructive" | "outline"
-> = {
-    queued: "outline",
-    processing: "secondary",
-    succeeded: "default",
-    failed: "destructive",
-};
-
 const hasPending = computed(() =>
-    props.generations.data.some(
-        (row) => row.status === "queued" || row.status === "processing",
-    ),
+    props.generations.data.some((row) => isPending(row.status)),
 );
 
 // Live status: poll only the generations prop, and only while a row is in flight.
@@ -63,20 +51,6 @@ watch(hasPending, (pending) => (pending ? start() : stop()), {
 
 const paginationLabel = (label: string): string =>
     label.replace("&laquo; ", "").replace(" &raquo;", "");
-
-const isImageExpired = (row: GenerationRow): boolean =>
-    row.image_url_expires_at !== null &&
-    new Date(row.image_url_expires_at).getTime() <= Date.now();
-
-const formatCost = (value: string | null): string =>
-    value === null ? "-" : `$${Number(value).toFixed(4)}`;
-
-const formatDate = (value: string | null): string =>
-    value === null ? "" : new Date(value).toLocaleString();
-
-const viewGenerationDetail = (generation: Generation) => {
-    console.log(generation);
-};
 </script>
 
 <template>
@@ -100,20 +74,19 @@ const viewGenerationDetail = (generation: Generation) => {
                         <TableHead class="text-right">Estimated</TableHead>
                         <TableHead class="text-right">Actual</TableHead>
                         <TableHead>Created</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead class="w-12"
+                            ><span class="sr-only">View</span></TableHead
+                        >
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     <TableEmpty
                         v-if="generations.data.length === 0"
-                        :colspan="6"
+                        :colspan="7"
                     >
                         No generations yet.
                     </TableEmpty>
-                    <TableRow
-                        v-for="row in generations.data"
-                        :key="row.id"
-                    >
+                    <TableRow v-for="row in generations.data" :key="row.id">
                         <TableCell class="w-24">
                             <img
                                 v-if="row.image_url && !isImageExpired(row)"
@@ -144,9 +117,7 @@ const viewGenerationDetail = (generation: Generation) => {
                             </p>
                         </TableCell>
                         <TableCell>
-                            <Badge :variant="statusVariant[row.status]">
-                                {{ row.status }}
-                            </Badge>
+                            <GenerationStatusBadge :status="row.status" />
                         </TableCell>
                         <TableCell class="text-right tabular-nums">
                             {{ formatCost(row.estimated_cost) }}
@@ -160,9 +131,16 @@ const viewGenerationDetail = (generation: Generation) => {
                             {{ formatDate(row.created_at) }}
                         </TableCell>
 
-                        <TableCell class="">
-                            <Link :href="show({ generation: row.id })">
-                                <component :is="EyeIcon" />
+                        <TableCell class="w-12">
+                            <Link
+                                :href="show({ generation: row.id })"
+                                component="prompt-edit/generations/show"
+                                :page-props="{ generation: row }"
+                                prefetch
+                                class="inline-flex size-11 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                :aria-label="`View generation: ${row.prompt}`"
+                            >
+                                <EyeIcon class="size-4" aria-hidden="true" />
                             </Link>
                         </TableCell>
                     </TableRow>
