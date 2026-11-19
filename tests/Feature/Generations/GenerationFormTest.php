@@ -1,8 +1,10 @@
 <?php
 
+use App\Events\GenerationUpdated;
 use App\Jobs\SubmitGenerationToPixelForge;
 use App\Models\Generation;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -288,4 +290,31 @@ describe('store', function () {
     test('guests are redirected to login', function () {
         $this->post(route('generate.store'), storeInput())->assertRedirect(route('login'));
     });
+});
+
+test('creating a generation announces it so the dashboard and history update live', function () {
+    Queue::fake();
+    Event::fake([GenerationUpdated::class]);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post(route('generate.store'), storeInput());
+
+    $generation = Generation::sole();
+
+    Event::assertDispatchedTimes(GenerationUpdated::class, 1);
+    Event::assertDispatched(GenerationUpdated::class, fn (GenerationUpdated $e) => $e->generationId === $generation->id
+        && $e->userId === $user->id
+        && $e->status === 'queued');
+});
+
+test('a repeated submission does not announce the generation again', function () {
+    Queue::fake();
+    Event::fake([GenerationUpdated::class]);
+    $user = User::factory()->create();
+    $input = storeInput();
+
+    $this->actingAs($user)->post(route('generate.store'), $input);
+    $this->actingAs($user)->post(route('generate.store'), $input);
+
+    Event::assertDispatchedTimes(GenerationUpdated::class, 1);
 });

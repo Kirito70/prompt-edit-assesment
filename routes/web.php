@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PromptEdit\GenerationController;
 use App\Http\Controllers\PromptEdit\GenerationEstimateController;
 use Illuminate\Support\Facades\Route;
@@ -7,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/dashboard')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('generate', [GenerationController::class, 'create'])->name('generate');
     Route::post('generate', [GenerationController::class, 'store'])->name('generate.store');
     Route::post('generate/estimate', GenerationEstimateController::class)

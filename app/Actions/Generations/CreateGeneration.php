@@ -2,6 +2,7 @@
 
 namespace App\Actions\Generations;
 
+use App\Events\GenerationUpdated;
 use App\Jobs\SubmitGenerationToPixelForge;
 use App\Models\Generation;
 use App\Models\User;
@@ -73,6 +74,7 @@ final class CreateGeneration
         }
 
         SubmitGenerationToPixelForge::dispatch($generation->id)->afterCommit();
+        GenerationUpdated::dispatch($generation->id, $user->id, $generation->status);
 
         return $generation;
     }
