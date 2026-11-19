@@ -8,8 +8,11 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 
 /**
- * The numbers on a user's dashboard. Money is summed with BCMath so totals are
- * exact on every database (SQLite's SUM would return a float).
+ * The numbers on a user's dashboard, all computed by the database.
+ *
+ * Amounts are rounded to 12 decimals inside the query. Postgres sums NUMERIC
+ * exactly; SQLite (used by the tests) sums floats, and ROUND removes any float
+ * noise before the value is turned back into an exact decimal string.
  */
 final class UserDashboard
 {
@@ -21,29 +24,32 @@ final class UserDashboard
 
     private const ZERO = '0.000000000000';
 
-    /** @var array<int, array{total: string, month: string, daily: array<string, string>}> */
-    private array $money = [];
-
     /**
      * @return array{total_spent: string, spent_this_month: string, images: int, in_progress: int, failed: int}
      */
     public function stats(User $user): array
     {
-        $counts = $user->generations()
+        $monthStart = Carbon::now('UTC')->startOfMonth()->toDateTimeString();
+
+        $row = $user->generations()
             ->toBase()
-            ->selectRaw('status, count(*) as aggregate')
-            ->groupBy('status')
-            ->pluck('aggregate', 'status');
+            ->selectRaw(
+                "count(case when status = 'succeeded' then 1 end) as images,
+                 count(case when status in ('queued', 'processing') then 1 end) as in_progress,
+                 count(case when status = 'failed' then 1 end) as failed,
+                 round(coalesce(sum(case when settled_at is not null then customer_charge end), 0), ?) as total_spent,
+                 round(coalesce(sum(case when settled_at >= ? then customer_charge end), 0), ?) as spent_this_month",
+                [self::SCALE, $monthStart, self::SCALE],
+            )
+            ->first();
 
-        $count = fn (string $status): int => (int) ($counts[$status] ?? 0);
-        $money = $this->money($user);
-
+        // An aggregate without GROUP BY always returns exactly one row.
         return [
-            'total_spent' => $money['total'],
-            'spent_this_month' => $money['month'],
-            'images' => $count('succeeded'),
-            'in_progress' => $count('queued') + $count('processing'),
-            'failed' => $count('failed'),
+            'total_spent' => $this->decimal($row->total_spent),
+            'spent_this_month' => $this->decimal($row->spent_this_month),
+            'images' => (int) $row->images,
+            'in_progress' => (int) $row->in_progress,
+            'failed' => (int) $row->failed,
         ];
     }
 
@@ -54,13 +60,21 @@ final class UserDashboard
      */
     public function dailySpend(User $user): array
     {
-        $daily = $this->money($user)['daily'];
-        $start = $this->windowStart();
+        $start = Carbon::now('UTC')->startOfDay()->subDays(self::DAYS - 1);
+
+        $spent = $user->generations()
+            ->toBase()
+            ->whereNotNull('settled_at')
+            ->where('settled_at', '>=', $start->toDateTimeString())
+            ->selectRaw('date(settled_at) as day, round(sum(customer_charge), ?) as amount', [self::SCALE])
+            ->groupBy('day')
+            ->pluck('amount', 'day');
+
         $days = [];
 
         for ($offset = 0; $offset < self::DAYS; $offset++) {
             $date = $start->copy()->addDays($offset)->toDateString();
-            $days[] = ['date' => $date, 'amount' => $daily[$date] ?? self::ZERO];
+            $days[] = ['date' => $date, 'amount' => $this->decimal($spent[$date] ?? null)];
         }
 
         return $days;
@@ -80,53 +94,19 @@ final class UserDashboard
     }
 
     /**
-     * One pass over the user's settled charges, shared by stats and the chart.
-     *
-     * @return array{total: string, month: string, daily: array<string, string>}
+     * A database number as an exact 12-decimal string. Postgres returns NUMERIC
+     * as a string (kept exact); SQLite returns a float (already rounded in SQL).
      */
-    private function money(User $user): array
+    private function decimal(mixed $value): string
     {
-        if (isset($this->money[$user->id])) {
-            return $this->money[$user->id];
+        if (is_float($value)) {
+            return is_finite($value) ? number_format($value, self::SCALE, '.', '') : self::ZERO;
         }
 
-        $monthStart = Carbon::now('UTC')->startOfMonth();
-        $windowStart = $this->windowStart();
-        $total = self::ZERO;
-        $month = self::ZERO;
-        $daily = [];
-
-        $settled = $user->generations()
-            ->whereNotNull('settled_at')
-            ->whereNotNull('customer_charge')
-            ->select(['id', 'customer_charge', 'settled_at'])
-            ->cursor();
-
-        foreach ($settled as $generation) {
-            $amount = $generation->customer_charge;
-
-            if (! is_numeric($amount) || $generation->settled_at === null) {
-                continue;
-            }
-
-            $settledAt = $generation->settled_at->copy()->utc();
-            $total = bcadd($total, $amount, self::SCALE);
-
-            if ($settledAt->gte($monthStart)) {
-                $month = bcadd($month, $amount, self::SCALE);
-            }
-
-            if ($settledAt->gte($windowStart)) {
-                $date = $settledAt->toDateString();
-                $daily[$date] = bcadd($daily[$date] ?? self::ZERO, $amount, self::SCALE);
-            }
+        if (is_int($value) || (is_string($value) && is_numeric($value))) {
+            return bcadd((string) $value, '0', self::SCALE);
         }
 
-        return $this->money[$user->id] = ['total' => $total, 'month' => $month, 'daily' => $daily];
-    }
-
-    private function windowStart(): Carbon
-    {
-        return Carbon::now('UTC')->startOfDay()->subDays(self::DAYS - 1);
+        return self::ZERO;
     }
 }

@@ -3,6 +3,7 @@
 use App\Models\Generation;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -141,4 +142,70 @@ test('every dashboard prop refreshes live on the users private generations chann
     expect(array_keys($live))->toEqualCanonicalizing(['stats', 'dailySpend', 'recent'])
         ->and(json_encode($live))->toContain("users.{$user->id}.generations")
         ->and(json_encode($live))->toContain('generation.updated');
+});
+
+describe('aggregation happens in the database', function () {
+    test('totals never load the settled generations into PHP', function () {
+        $user = User::factory()->create();
+        Generation::factory()->for($user)->succeeded()->count(60)->create([
+            'customer_charge' => '0.010000000000',
+            'settled_at' => Carbon::parse('2026-11-18 09:00:00', 'UTC'),
+        ]);
+
+        $loaded = 0;
+        Generation::retrieved(function () use (&$loaded) {
+            $loaded++;
+        });
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.total_spent', '0.600000000000')
+                ->where('stats.images', 60));
+
+        // Only the 5 "recent" rows are ever hydrated, however much history exists.
+        expect($loaded)->toBeLessThanOrEqual(5);
+    });
+
+    test('the number of queries does not grow with the amount of history', function () {
+        $user = User::factory()->create();
+        Generation::factory()->for($user)->succeeded()->create([
+            'customer_charge' => '0.010000000000',
+            'settled_at' => Carbon::parse('2026-11-18 09:00:00', 'UTC'),
+        ]);
+
+        $queries = function () use ($user): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->actingAs($user)->get(route('dashboard'))->assertOk();
+            $count = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $count;
+        };
+
+        $few = $queries();
+
+        Generation::factory()->for($user)->succeeded()->count(80)->create([
+            'customer_charge' => '0.010000000000',
+            'settled_at' => Carbon::parse('2026-11-17 09:00:00', 'UTC'),
+        ]);
+
+        expect($queries())->toBe($few);
+    });
+
+    test('many tiny charges add up exactly, with no floating point drift', function () {
+        $user = User::factory()->create();
+        Generation::factory()->for($user)->succeeded()->count(1000)->create([
+            'customer_charge' => '0.000006250000',
+            'settled_at' => Carbon::parse('2026-11-19 08:00:00', 'UTC'),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.total_spent', '0.006250000000')
+                ->where('stats.spent_this_month', '0.006250000000')
+                ->where('dailySpend.29.amount', '0.006250000000'));
+    });
 });
