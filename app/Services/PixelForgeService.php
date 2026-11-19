@@ -112,6 +112,18 @@ final class PixelForgeService
         ));
     }
 
+    /**
+     * What Pixelforge says it billed this API key per UTC day, for reconciliation.
+     *
+     * @return array<string, mixed>
+     */
+    public function usage(string $startDate, string $endDate): array
+    {
+        return $this->decode($this->send(
+            fn () => $this->client()->get('/usage', ['start_date' => $startDate, 'end_date' => $endDate]),
+        ));
+    }
+
     private function client(): PendingRequest
     {
         return Http::baseUrl((string) config('services.pixelforge.base_url'))

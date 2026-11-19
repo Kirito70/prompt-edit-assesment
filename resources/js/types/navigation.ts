@@ -12,3 +12,9 @@ export type NavItem = {
     icon?: LucideIcon;
     isActive?: boolean;
 };
+
+/** A labelled group of sidebar links. */
+export type NavSection = {
+    title: string;
+    items: NavItem[];
+};

@@ -2,6 +2,7 @@
 
 use App\Models\Generation;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
@@ -81,4 +82,19 @@ test('a guest cannot listen to any generation channel', function () {
 
     authorizeChannel("private-generations.{$generation->id}")->assertForbidden();
     authorizeChannel("private-users.{$generation->user_id}.generations")->assertForbidden();
+});
+
+test('a channel id that is not a UUID is refused without touching the database', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    authorizeChannel('private-generations.not-a-uuid')->assertForbidden();
+    $generationQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query) => str_contains($query['query'], 'from "generations"'))
+        ->count();
+    DB::disableQueryLog();
+
+    expect($generationQueries)->toBe(0);
 });

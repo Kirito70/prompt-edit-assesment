@@ -1,7 +1,10 @@
 <?php
 
+use App\Models\Generation;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -109,4 +112,19 @@ function fakePixelForge(array $stubs = []): void
     Http::fake(array_merge([
         'https://pixelforge.test/v1/pricing' => Http::response(pfFixturePricing()),
     ], $stubs));
+}
+
+/**
+ * A finished, billed generation: what the admin report sums.
+ */
+function completedGeneration(User $user, string $charge, string $cost, string $at, array $extra = []): Generation
+{
+    $time = Carbon::parse($at, 'UTC');
+
+    return Generation::factory()->for($user)->succeeded()->create(array_merge([
+        'customer_charge' => $charge,
+        'provider_cost' => $cost,
+        'provider_completed_at' => $time,
+        'settled_at' => $time,
+    ], $extra));
 }

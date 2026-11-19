@@ -11,20 +11,22 @@ import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import type { NavItem } from '@/types';
 
 defineProps<{
+    title: string;
     items: NavItem[];
 }>();
 
-const { isCurrentUrl } = useCurrentUrl();
+// A link stays highlighted on its child pages (e.g. History while viewing one generation).
+const { isCurrentOrParentUrl } = useCurrentUrl();
 </script>
 
 <template>
     <SidebarGroup class="px-2 py-0">
-        <SidebarGroupLabel>Platform</SidebarGroupLabel>
+        <SidebarGroupLabel>{{ title }}</SidebarGroupLabel>
         <SidebarMenu>
             <SidebarMenuItem v-for="item in items" :key="item.title">
                 <SidebarMenuButton
                     as-child
-                    :is-active="isCurrentUrl(item.href)"
+                    :is-active="isCurrentOrParentUrl(item.href)"
                     :tooltip="item.title"
                 >
                     <Link :href="item.href">

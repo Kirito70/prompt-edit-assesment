@@ -5,6 +5,7 @@ namespace App\Services\Dashboard;
 use App\Http\Presenters\GenerationPresenter;
 use App\Models\Generation;
 use App\Models\User;
+use App\Support\Decimal;
 use Illuminate\Support\Carbon;
 
 /**
@@ -19,10 +20,6 @@ final class UserDashboard
     public const DAYS = 30;
 
     private const RECENT = 5;
-
-    private const SCALE = 12;
-
-    private const ZERO = '0.000000000000';
 
     /**
      * @return array{total_spent: string, spent_this_month: string, images: int, in_progress: int, failed: int}
@@ -39,14 +36,14 @@ final class UserDashboard
                  count(case when status = 'failed' then 1 end) as failed,
                  round(coalesce(sum(case when settled_at is not null then customer_charge end), 0), ?) as total_spent,
                  round(coalesce(sum(case when settled_at >= ? then customer_charge end), 0), ?) as spent_this_month",
-                [self::SCALE, $monthStart, self::SCALE],
+                [Decimal::SCALE, $monthStart, Decimal::SCALE],
             )
             ->first();
 
         // An aggregate without GROUP BY always returns exactly one row.
         return [
-            'total_spent' => $this->decimal($row->total_spent),
-            'spent_this_month' => $this->decimal($row->spent_this_month),
+            'total_spent' => Decimal::fromDatabase($row->total_spent),
+            'spent_this_month' => Decimal::fromDatabase($row->spent_this_month),
             'images' => (int) $row->images,
             'in_progress' => (int) $row->in_progress,
             'failed' => (int) $row->failed,
@@ -66,7 +63,7 @@ final class UserDashboard
             ->toBase()
             ->whereNotNull('settled_at')
             ->where('settled_at', '>=', $start->toDateTimeString())
-            ->selectRaw('date(settled_at) as day, round(sum(customer_charge), ?) as amount', [self::SCALE])
+            ->selectRaw('date(settled_at) as day, round(sum(customer_charge), ?) as amount', [Decimal::SCALE])
             ->groupBy('day')
             ->pluck('amount', 'day');
 
@@ -74,7 +71,7 @@ final class UserDashboard
 
         for ($offset = 0; $offset < self::DAYS; $offset++) {
             $date = $start->copy()->addDays($offset)->toDateString();
-            $days[] = ['date' => $date, 'amount' => $this->decimal($spent[$date] ?? null)];
+            $days[] = ['date' => $date, 'amount' => Decimal::fromDatabase($spent[$date] ?? null)];
         }
 
         return $days;
@@ -91,22 +88,5 @@ final class UserDashboard
             ->get()
             ->map(fn (Generation $generation): array => GenerationPresenter::row($generation))
             ->all());
-    }
-
-    /**
-     * A database number as an exact 12-decimal string. Postgres returns NUMERIC
-     * as a string (kept exact); SQLite returns a float (already rounded in SQL).
-     */
-    private function decimal(mixed $value): string
-    {
-        if (is_float($value)) {
-            return is_finite($value) ? number_format($value, self::SCALE, '.', '') : self::ZERO;
-        }
-
-        if (is_int($value) || (is_string($value) && is_numeric($value))) {
-            return bcadd((string) $value, '0', self::SCALE);
-        }
-
-        return self::ZERO;
     }
 }

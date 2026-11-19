@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import { Link } from "@inertiajs/vue3";
-import {
-    BookOpen,
-    FolderGit2,
-    History,
-    LayoutGrid,
-    Sparkles,
-} from "@lucide/vue";
+import { Link, usePage } from "@inertiajs/vue3";
+import { History, LayoutGrid, ShieldCheck, Sparkles } from "@lucide/vue";
+import { computed } from "vue";
 import AppLogo from "@/components/AppLogo.vue";
-import NavFooter from "@/components/NavFooter.vue";
 import NavMain from "@/components/NavMain.vue";
 import NavUser from "@/components/NavUser.vue";
 import {
@@ -21,38 +15,46 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { dashboard, generate, history } from "@/routes";
-import type { NavItem } from "@/types";
+import { dashboard as adminDashboard } from "@/routes/admin";
+import type { NavSection } from "@/types";
 
-const mainNavItems: NavItem[] = [
-    {
-        title: "Dashboard",
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-    {
-        title: "Generate",
-        href: generate(),
-        icon: Sparkles,
-    },
-    {
-        title: "History",
-        href: history(),
-        icon: History,
-    },
-];
+const page = usePage();
 
-const footerNavItems: NavItem[] = [
-    {
-        title: "Repository",
-        href: "https://github.com/laravel/vue-starter-kit",
-        icon: FolderGit2,
-    },
-    {
-        title: "Documentation",
-        href: "https://laravel.com/docs/starter-kits#vue",
-        icon: BookOpen,
-    },
-];
+const isAdmin = computed(() => page.props.auth.user.is_admin);
+
+const sections = computed<NavSection[]>(() => {
+    const list: NavSection[] = [
+        {
+            title: "Overview",
+            items: [
+                { title: "Dashboard", href: dashboard(), icon: LayoutGrid },
+            ],
+        },
+        {
+            title: "Images",
+            items: [
+                { title: "Generate", href: generate(), icon: Sparkles },
+                { title: "History", href: history(), icon: History },
+            ],
+        },
+    ];
+
+    // The link is only a convenience: the server enforces who may open /admin.
+    if (isAdmin.value) {
+        list.push({
+            title: "Administration",
+            items: [
+                {
+                    title: "Admin dashboard",
+                    href: adminDashboard(),
+                    icon: ShieldCheck,
+                },
+            ],
+        });
+    }
+
+    return list;
+});
 </script>
 
 <template>
@@ -70,11 +72,15 @@ const footerNavItems: NavItem[] = [
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
+            <NavMain
+                v-for="section in sections"
+                :key="section.title"
+                :title="section.title"
+                :items="section.items"
+            />
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

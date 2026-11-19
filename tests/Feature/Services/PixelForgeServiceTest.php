@@ -204,3 +204,35 @@ describe('getGeneration', function () {
         service()->getGeneration('gen_x');
     })->throws(PixelForgeRejected::class);
 });
+
+describe('usage', function () {
+    test('asks for the date range with bearer auth and returns the report', function () {
+        Http::fake([PF_BASE.'/usage*' => Http::response([
+            'object' => 'usage',
+            'data' => [['date' => '2026-11-19', 'generations' => 3, 'cost_usd' => '0.123456789']],
+            'total' => ['generations' => 3, 'cost_usd' => '0.123456789'],
+        ])]);
+
+        $usage = service()->usage('2026-11-01', '2026-11-19');
+
+        expect($usage['data'][0]['cost_usd'])->toBe('0.123456789');
+
+        Http::assertSent(fn (Request $request) => $request->method() === 'GET'
+            && str_contains($request->url(), '/usage')
+            && str_contains($request->url(), 'start_date=2026-11-01')
+            && str_contains($request->url(), 'end_date=2026-11-19')
+            && $request->hasHeader('Authorization', 'Bearer pf_test_key'));
+    });
+
+    test('a rejected range is a permanent rejection', function () {
+        Http::fake([PF_BASE.'/usage*' => Http::response(pixelForgeError('date_range_too_long'), 422)]);
+
+        service()->usage('2026-01-01', '2026-11-19');
+    })->throws(PixelForgeRejected::class);
+
+    test('a server error is an unknown outcome', function () {
+        Http::fake([PF_BASE.'/usage*' => Http::response('boom', 500)]);
+
+        service()->usage('2026-11-01', '2026-11-19');
+    })->throws(PixelForgeOutcomeUnknown::class);
+});
