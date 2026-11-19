@@ -10,3 +10,13 @@ export type Credits = {
     available: string;
     packages: CreditPackage[];
 };
+
+export type CreditTransactionRow = {
+    id: number;
+    type: "purchase" | "charge";
+    /** Signed: purchases are positive, charges negative. */
+    amount: string;
+    balance_after: string;
+    generation_id: string | null;
+    created_at: string;
+};

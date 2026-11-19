@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Link, usePage } from "@inertiajs/vue3";
-import { History, LayoutGrid, ShieldCheck, Sparkles } from "@lucide/vue";
+import {
+    History,
+    LayoutGrid,
+    Receipt,
+    ShieldCheck,
+    Sparkles,
+} from "@lucide/vue";
 import { computed } from "vue";
 import AppLogo from "@/components/AppLogo.vue";
 import NavCredits from "@/components/credits/NavCredits.vue";
@@ -16,6 +22,7 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { dashboard, generate, history } from "@/routes";
+import { index as creditsIndex } from "@/routes/credits";
 import { dashboard as adminDashboard } from "@/routes/admin";
 import type { NavSection } from "@/types";
 
@@ -37,6 +44,10 @@ const sections = computed<NavSection[]>(() => {
                 { title: "Generate", href: generate(), icon: Sparkles },
                 { title: "History", href: history(), icon: History },
             ],
+        },
+        {
+            title: "Account",
+            items: [{ title: "Credits", href: creditsIndex(), icon: Receipt }],
         },
     ];
 

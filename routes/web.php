@@ -17,6 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('generate/estimate', GenerationEstimateController::class)
         ->middleware('throttle:120,1')
         ->name('generate.estimate');
+    Route::get('credits', [CreditController::class, 'index'])->name('credits.index');
     Route::post('credits', [CreditController::class, 'store'])->middleware('throttle:30,1')->name('credits.store');
     Route::get('history', [GenerationController::class, 'index'])->name('history');
     Route::get('history/{generation}', [GenerationController::class, 'show'])

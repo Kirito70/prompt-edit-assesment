@@ -1,11 +1,13 @@
 <?php
 
+use App\Events\GenerationUpdated;
 use App\Jobs\SubmitGenerationToPixelForge;
 use App\Models\CreditTransaction;
 use App\Models\Generation;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\PixelForge\WebhookEventProcessor;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -238,5 +240,71 @@ describe('settling', function () {
         creditsSettle(Generation::sole()->forceFill(['provider_generation_id' => 'gen_x']), 'generation.failed', 'evt_1');
 
         expect($user->fresh()->availableCredits())->toBe('0.100000000000');
+    });
+});
+
+describe('credit history page', function () {
+    test('guests are redirected to login', function () {
+        $this->get(route('credits.index'))->assertRedirect(route('login'));
+    });
+
+    test('lists only my transactions, newest first, with their generation', function () {
+        $user = User::factory()->create(['balance' => '0']);
+        $other = User::factory()->create(['balance' => '0']);
+        $generation = Generation::factory()->for($user)->processing()->create(['reserved_credits' => '0']);
+
+        CreditTransaction::create(['user_id' => $user->id, 'type' => 'purchase', 'amount' => '10', 'balance_after' => '10', 'created_at' => now()->subHour()]);
+        CreditTransaction::create(['user_id' => $user->id, 'generation_id' => $generation->id, 'type' => 'charge', 'amount' => '-0.5', 'balance_after' => '9.5', 'created_at' => now()]);
+        CreditTransaction::create(['user_id' => $other->id, 'type' => 'purchase', 'amount' => '25', 'balance_after' => '25']);
+
+        $this->actingAs($user)->get(route('credits.index'))->assertInertia(fn (Assert $page) => $page
+            ->component('credits/index')
+            ->where('balance', '0.000000000000')
+            ->has('transactions.data', 2)
+            ->where('transactions.data.0.type', 'charge')
+            ->where('transactions.data.0.amount', '-0.500000000000')
+            ->where('transactions.data.0.balance_after', '9.500000000000')
+            ->where('transactions.data.0.generation_id', $generation->id)
+            ->where('transactions.data.1.type', 'purchase')
+            ->where('transactions.data.1.generation_id', null));
+    });
+
+    test('is paginated', function () {
+        $user = User::factory()->create();
+
+        foreach (range(1, 20) as $i) {
+            CreditTransaction::create(['user_id' => $user->id, 'type' => 'purchase', 'amount' => '1', 'balance_after' => (string) $i]);
+        }
+
+        $this->actingAs($user)->get(route('credits.index'))->assertInertia(fn (Assert $page) => $page
+            ->has('transactions.data', 15)
+            ->where('transactions.total', 20));
+    });
+});
+
+describe('the balance in the nav stays current', function () {
+    test('is a live prop on the signed in users own channel', function () {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+
+        $live = json_encode($this->actingAs($user)->get(route('dashboard'))->viewData('page')['liveProps'] ?? null);
+
+        expect($live)->toContain('credits')
+            ->and($live)->toContain("users.{$user->id}.generations")
+            ->and($live)->not->toContain("users.{$other->id}.generations")
+            ->and($live)->toContain('generation.updated');
+    });
+
+    test('a failed generation frees its hold and announces it', function () {
+        Event::fake([GenerationUpdated::class]);
+        $user = User::factory()->create(['balance' => '0.100000000000']);
+        $this->actingAs($user)->post(route('generate.store'), creditsInput())->assertSessionHasNoErrors();
+        expect($user->fresh()->availableCredits())->toBe('0.013568750000');
+
+        creditsSettle(Generation::sole()->forceFill(['provider_generation_id' => 'gen_x']), 'generation.failed', 'evt_1');
+
+        Event::assertDispatched(GenerationUpdated::class, fn ($e) => $e->status === 'failed' && $e->userId === $user->id);
+        $this->actingAs($user)->get(route('dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('credits.available', '0.100000000000'));
     });
 });

@@ -134,12 +134,12 @@ test('another users generations never appear anywhere on the dashboard', functio
             ->has('recent', 0));
 });
 
-test('every dashboard prop refreshes live on the users private generations channel', function () {
+test('every dashboard prop, and the shared credits balance, refreshes live on the users private generations channel', function () {
     $user = User::factory()->create();
 
     $live = $this->actingAs($user)->get(route('dashboard'))->viewData('page')['liveProps'] ?? [];
 
-    expect(array_keys($live))->toEqualCanonicalizing(['stats', 'dailySpend', 'recent'])
+    expect(array_keys($live))->toEqualCanonicalizing(['stats', 'dailySpend', 'recent', 'credits'])
         ->and(json_encode($live))->toContain("users.{$user->id}.generations")
         ->and(json_encode($live))->toContain('generation.updated');
 });

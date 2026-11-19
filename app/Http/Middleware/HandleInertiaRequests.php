@@ -2,8 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Events\GenerationUpdated;
 use App\Support\Decimal;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -42,11 +45,16 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'credits' => fn () => $request->user() === null ? null : [
-                'balance' => Decimal::fromDatabase($request->user()->balance),
-                'available' => $request->user()->availableCredits(),
-                'packages' => $this->packages(),
-            ],
+            'credits' => $request->user() === null ? null : Inertia::live(
+                fn (): array => [
+                    'balance' => Decimal::fromDatabase($request->user()->balance),
+                    'available' => $request->user()->availableCredits(),
+                    'packages' => $this->packages(),
+                ],
+                // Starting, finishing or failing a generation all move the balance.
+                on: GenerationUpdated::class,
+                channel: new PrivateChannel("users.{$request->user()->id}.generations"),
+            ),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
