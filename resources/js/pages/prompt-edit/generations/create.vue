@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm } from "@inertiajs/vue3";
+import { Head, useForm, usePage } from "@inertiajs/vue3";
 import { Plus } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import Heading from "@/components/Heading.vue";
@@ -29,8 +29,10 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useBuyCredits } from "@/composables/useBuyCredits";
 import { useGenerationEstimate } from "@/composables/useGenerationEstimate";
 import { newClientRequestId } from "@/lib/clientRequestId";
+import { formatCost } from "@/lib/generation";
 import { generate } from "@/routes";
 import { store } from "@/routes/generate";
 import type { GenerationLimits } from "@/types";
@@ -85,9 +87,26 @@ const canAddImage = computed(
 const priceUnavailable = computed(() => status.value === "error");
 const confirmOpen = ref(false);
 
+// The server decides; this only warns early. The price could be as high as the
+// top of the range, and with no price the user needs some credit to continue.
+const page = usePage();
+const credits = computed(() => page.props.credits);
+const { openBuyCredits } = useBuyCredits();
+
+const shortOnCredits = computed(() => {
+    const available = Number(credits.value?.available ?? 0);
+
+    if (estimate.value !== null) {
+        return available < Number(estimate.value.range.high);
+    }
+
+    return priceUnavailable.value && available <= 0;
+});
+
 const canSubmit = computed(
     () =>
         !form.processing &&
+        !shortOnCredits.value &&
         ((status.value === "ready" && estimate.value !== null) ||
             priceUnavailable.value),
 );
@@ -262,6 +281,27 @@ const confirmAndSubmit = (): void => {
                     :message="message"
                     @retry="retry"
                 />
+
+                <Alert
+                    v-if="shortOnCredits || serverError('credits')"
+                    variant="destructive"
+                    role="alert"
+                >
+                    <AlertDescription class="flex flex-wrap items-center gap-3">
+                        <span class="text-pretty">
+                            You have {{ formatCost(credits?.available ?? "0") }}
+                            in credits, which does not cover this image.
+                        </span>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="min-h-11"
+                            @click="openBuyCredits"
+                        >
+                            Buy credits
+                        </Button>
+                    </AlertDescription>
+                </Alert>
 
                 <Alert
                     v-if="serverError('estimate')"

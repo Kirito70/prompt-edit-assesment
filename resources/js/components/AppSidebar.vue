@@ -3,6 +3,7 @@ import { Link, usePage } from "@inertiajs/vue3";
 import { History, LayoutGrid, ShieldCheck, Sparkles } from "@lucide/vue";
 import { computed } from "vue";
 import AppLogo from "@/components/AppLogo.vue";
+import NavCredits from "@/components/credits/NavCredits.vue";
 import NavMain from "@/components/NavMain.vue";
 import NavUser from "@/components/NavUser.vue";
 import {
@@ -81,6 +82,7 @@ const sections = computed<NavSection[]>(() => {
         </SidebarContent>
 
         <SidebarFooter>
+            <NavCredits />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

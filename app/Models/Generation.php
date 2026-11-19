@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string $status queued|processing|succeeded|failed
  * @property string $submission_status pending|accepted|rejected|unknown
  * @property string|null $estimated_customer_charge
+ * @property string $reserved_credits
  * @property string|null $provider_cost
  * @property string|null $customer_charge
  * @property array<string, mixed>|null $rates
@@ -57,6 +58,7 @@ class Generation extends Model
             'rates' => 'array',
             'usage' => 'array',
             'estimated_customer_charge' => 'decimal:12',
+            'reserved_credits' => 'decimal:12',
             'provider_cost' => 'decimal:12',
             'customer_charge' => 'decimal:12',
             'image_url_expires_at' => 'datetime',

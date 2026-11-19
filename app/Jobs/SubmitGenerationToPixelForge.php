@@ -127,6 +127,7 @@ class SubmitGenerationToPixelForge implements ShouldQueue
                 'customer_charge' => $zero,
                 'error_code' => $code,
                 'error_message' => $message,
+                'reserved_credits' => $zero,
                 'settled_at' => now(),
             ]);
 

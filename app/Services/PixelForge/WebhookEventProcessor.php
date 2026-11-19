@@ -5,6 +5,7 @@ namespace App\Services\PixelForge;
 use App\Events\GenerationUpdated;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
+use App\Services\Credits\Wallet;
 use App\Services\GenerationPricing;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,10 @@ final class WebhookEventProcessor
 {
     private const TERMINAL_STATUSES = ['succeeded', 'failed'];
 
-    public function __construct(private readonly GenerationPricing $pricing) {}
+    public function __construct(
+        private readonly GenerationPricing $pricing,
+        private readonly Wallet $wallet,
+    ) {}
 
     /**
      * @return bool true when the event is done (applied or deliberately
@@ -155,8 +159,12 @@ final class WebhookEventProcessor
             'image_url' => $object['image_url'] ?? null,
             'image_url_expires_at' => $this->date($object['image_url_expires_at'] ?? null),
             'provider_completed_at' => $this->date($object['completed_at'] ?? null),
+            'reserved_credits' => '0',
             'settled_at' => now(),
         ]);
+
+        // Same transaction as the settlement, and the status check above means it runs once.
+        $this->wallet->charge($generation);
     }
 
     /**
@@ -173,6 +181,7 @@ final class WebhookEventProcessor
             'error_code' => $object['error']['code'] ?? null,
             'error_message' => $object['error']['message'] ?? null,
             'provider_completed_at' => $this->date($object['completed_at'] ?? null),
+            'reserved_credits' => '0',
             'settled_at' => now(),
         ]);
     }

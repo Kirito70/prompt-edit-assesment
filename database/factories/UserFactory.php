@@ -33,6 +33,8 @@ class UserFactory extends Factory
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
+            // Plenty to generate with; tests for running short set their own.
+            'balance' => '100.000000000000',
         ];
     }
 

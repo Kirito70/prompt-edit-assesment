@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Decimal;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,7 +42,28 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'credits' => fn () => $request->user() === null ? null : [
+                'balance' => Decimal::fromDatabase($request->user()->balance),
+                'available' => $request->user()->availableCredits(),
+                'packages' => $this->packages(),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
+    }
+
+    /**
+     * The fake credit packages a user can pick from.
+     *
+     * @return list<array{id: string, amount: string}>
+     */
+    private function packages(): array
+    {
+        $packages = [];
+
+        foreach ((array) config('credits.packages') as $id => $amount) {
+            $packages[] = ['id' => (string) $id, 'amount' => (string) $amount];
+        }
+
+        return $packages;
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\PromptEdit;
 
 use App\Actions\Generations\CreateGeneration;
 use App\Events\GenerationUpdated;
+use App\Exceptions\InsufficientCredits;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\GenerationPresenter;
 use App\Http\Requests\PromptEdit\StoreGenerationRequest;
@@ -49,6 +50,10 @@ class GenerationController extends Controller
                 referenceImages: $request->referenceImages(),
                 allowWithoutEstimate: $request->boolean('confirmed_without_estimate'),
             );
+        } catch (InsufficientCredits) {
+            return back()
+                ->withInput()
+                ->withErrors(['credits' => __('You do not have enough credits for this image. Buy credits to continue.')]);
         } catch (PixelForgeException $e) {
             report($e);
 

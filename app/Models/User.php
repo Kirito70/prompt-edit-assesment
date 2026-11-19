@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Decimal;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -22,6 +23,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property bool $is_admin
+ * @property string $balance
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
@@ -47,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'balance' => 'decimal:12',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
@@ -55,5 +58,26 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function generations(): HasMany
     {
         return $this->hasMany(Generation::class);
+    }
+
+    /** @return HasMany<CreditTransaction, $this> */
+    public function creditTransactions(): HasMany
+    {
+        return $this->hasMany(CreditTransaction::class);
+    }
+
+    /**
+     * The balance minus what unfinished generations hold. This is what the
+     * user can still spend.
+     *
+     * @return numeric-string
+     */
+    public function availableCredits(): string
+    {
+        $held = Decimal::fromDatabase(
+            $this->generations()->toBase()->selectRaw('round(coalesce(sum(reserved_credits), 0), ?) as held', [Decimal::SCALE])->value('held'),
+        );
+
+        return bcsub(Decimal::fromDatabase($this->balance), $held, Decimal::SCALE);
     }
 }
